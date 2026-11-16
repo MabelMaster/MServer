@@ -68,10 +68,7 @@ Signaling and ground truth share the WebTransport stream because a server-opened
 
 ## Tradeoffs
 
-Ground truth goes on the reliable stream instead of a datagram. A lost datagram would make that frame unscorable, and the stream keeps the answer ahead of the positions.
-
-The frame index comes from the RTP timestamp, not from when the frame arrives. Encoding and the network add delay, so arrival time does not identify the drawn position.
-
-The picture is generated in process and encoded by aiortc's VP8 encoder. There is no media file to seek.
-
-Host ICE candidates are enough on one machine. The Docker path rewrites them and publishes a single UDP port rather than pretending the container's address is reachable from the browser.
+1. Ground truth goes on the reliable stream instead of a datagram. A lost datagram would make that frame unscorable, and the stream keeps the answer ahead of the positions.
+2. The frame index comes from the RTP timestamp, not from when the frame arrives. Encoding and the network add delay, so arrival time does not identify the drawn position.
+3. The picture is generated in process and encoded by aiortc's VP8 encoder. There is no media file to seek.
+4. Host ICE candidates are enough on one machine. The Docker path rewrites them and publishes a single UDP port rather than pretending the container's address is reachable from the browser.
