@@ -118,7 +118,7 @@ async function start() {
   await pc.setLocalDescription(await pc.createOffer());
   await waitUntilGathered(pc);
 
-  const transport = new WebTransport("https://localhost:4433/wt");
+  const transport = new WebTransport(`${location.origin}/wt`);
   await transport.ready;
   const stream = await transport.createBidirectionalStream();
   const writer = stream.writable.getWriter();

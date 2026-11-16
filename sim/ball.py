@@ -1,9 +1,11 @@
 import math
 from dataclasses import dataclass
+
 class Arena:
     def __init__(self, width, height):
         self.width=width
         self.height=height
+
 class Ball:
     def __init__(self, x, y, vx, vy, radius,width,height):
         values = (x, y, vx, vy, radius, width, height)
@@ -27,7 +29,6 @@ class Ball:
         x,vx=reflect(self.x+self.vx*dt,self.vx,self.radius, self.arena.width-self.radius)
         y,vy=reflect(self.y+self.vy*dt,self.vy,self.radius,self.arena.height-self.radius)
         self.x,self.vx,self.y,self.vy=x,vx,y,vy
-
 
 def reflect(pos,vel,low,high):
     if pos < low:
