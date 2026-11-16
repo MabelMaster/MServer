@@ -1,7 +1,7 @@
 import numpy as np
 
 from sim.ball import Ball
-from sim.frame import render
+from sim.frame import render,detect_center
 
 WHITE = [255, 255, 255]
 BLACK = [0, 0, 0]
@@ -32,3 +32,10 @@ def test_white_pixel_follows_the_ball():
     after = render(ball)
     assert after[50, 30].tolist() == BLACK
     assert after[50, 50].tolist() == WHITE
+
+def test_detect_center_matches_the_ball():
+    ball = Ball(x=50, y=60, vx=0, vy=0, radius=30, width=200, height=160)
+    detected = detect_center(render(ball))
+    assert detected is not None
+    x, y = detected
+    assert abs(x - 50) < 1 and abs(y - 60) < 1
