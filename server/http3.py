@@ -8,7 +8,7 @@ from aioquic.h3.connection import H3_ALPN, H3Connection
 from aioquic.h3.events import HeadersReceived, WebTransportStreamDataReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aiortc import RTCPeerConnection, RTCSessionDescription
-from server.signaling import answer_message, parse_message
+from server.signaling import answer_message, parse_message, truth_message
 from server.static import read_asset
 from server.track import BallTrack
 
@@ -69,21 +69,39 @@ class HttpServerProtocol(QuicConnectionProtocol):
             line, _, rest = bytes(buffer).partition(b"\n")
             self._buffers[event.stream_id] = bytearray(rest)
             buffer = self._buffers[event.stream_id]
-            asyncio.create_task(self._answer(event.stream_id, line.decode()))
+            asyncio.create_task(self._answer(event.stream_id, event.session_id, line.decode()))
 
-    async def _answer(self, stream_id, line):
+    async def _answer(self, stream_id, session_id, line):
         pc = RTCPeerConnection()
         try:
             offer = parse_message(line)
             await pc.setRemoteDescription(RTCSessionDescription(sdp=offer["sdp"], type="offer"))
-            pc.addTrack(BallTrack())
+            # The track starts during setLocalDescription, before the answer is
+            # written. Hold ground truth until that answer line is on the stream.
+            queued = []
+            gate = {"open": False}
+
+            def publish(index, x, y):
+                payload = truth_message(index, x, y)
+                if not gate["open"]:
+                    queued.append(payload)
+                    return
+                self._quic.send_stream_data(stream_id, payload)
+                self.transmit()
+
+            pc.addTrack(BallTrack(publish))
             await pc.setLocalDescription(await pc.createAnswer())
             while pc.iceGatheringState != "complete":
                 await asyncio.sleep(0.05)
             payload = answer_message(pc.localDescription.sdp)
         except Exception as exc:
             payload = (json.dumps({"type": "error", "error": str(exc)}) + "\n").encode()
+            queued = None
         self._quic.send_stream_data(stream_id, payload)
+        if queued is not None:
+            gate["open"] = True
+            for item in queued:
+                self._quic.send_stream_data(stream_id, item)
         self.transmit()
 
 
