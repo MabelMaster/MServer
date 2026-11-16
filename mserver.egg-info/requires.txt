@@ -1,6 +1,0 @@
-aioquic
-aiortc
-numpy
-
-[dev]
-pytest
