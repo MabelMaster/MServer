@@ -10,6 +10,7 @@ from aioquic.quic.configuration import QuicConfiguration
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from server.signaling import answer_message, parse_message
 from server.static import read_asset
+from server.track import BallTrack
 
 ROOT = Path(__file__).resolve().parents[1] / "web"
 
@@ -75,6 +76,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
         try:
             offer = parse_message(line)
             await pc.setRemoteDescription(RTCSessionDescription(sdp=offer["sdp"], type="offer"))
+            pc.addTrack(BallTrack())
             await pc.setLocalDescription(await pc.createAnswer())
             while pc.iceGatheringState != "complete":
                 await asyncio.sleep(0.05)

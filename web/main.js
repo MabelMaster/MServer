@@ -22,6 +22,10 @@ async function readLine(reader) {
 
 async function start() {
   const pc = new RTCPeerConnection();
+  const video = document.querySelector("video");
+  pc.addEventListener("track", (event) => {
+    video.srcObject = event.streams[0] || new MediaStream([event.track]);
+  });
   pc.addTransceiver("video", { direction: "recvonly" });
   pc.addEventListener("connectionstatechange", () => {
     status.textContent = pc.connectionState;
