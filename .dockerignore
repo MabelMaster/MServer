@@ -1,0 +1,6 @@
+Mserver/
+certs/
+.git/
+.pytest_cache/
+**/__pycache__/
+*.egg-info/

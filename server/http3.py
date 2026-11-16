@@ -1,6 +1,8 @@
 import argparse
 import asyncio
+import errno
 import json
+import signal
 from pathlib import Path
 
 from aioquic.asyncio import QuicConnectionProtocol, serve
@@ -8,11 +10,14 @@ from aioquic.h3.connection import H3_ALPN, H3Connection
 from aioquic.h3.events import HeadersReceived, WebTransportStreamDataReceived
 from aioquic.quic.configuration import QuicConfiguration
 from aiortc import RTCPeerConnection, RTCSessionDescription
-from server.signaling import answer_message, parse_message, truth_message
+from server.signaling import advertise_host, answer_message, listen_hosts, parse_message, truth_message
 from server.static import read_asset
 from server.track import BallTrack
 
 ROOT = Path(__file__).resolve().parents[1] / "web"
+PEERS = set()
+ADVERTISE = ""
+ICE_PORT = 0
 
 
 class HttpServerProtocol(QuicConnectionProtocol):
@@ -73,6 +78,7 @@ class HttpServerProtocol(QuicConnectionProtocol):
 
     async def _answer(self, stream_id, session_id, line):
         pc = RTCPeerConnection()
+        PEERS.add(pc)
         try:
             offer = parse_message(line)
             await pc.setRemoteDescription(RTCSessionDescription(sdp=offer["sdp"], type="offer"))
@@ -90,10 +96,14 @@ class HttpServerProtocol(QuicConnectionProtocol):
                 self.transmit()
 
             pc.addTrack(BallTrack(publish))
-            await pc.setLocalDescription(await pc.createAnswer())
-            while pc.iceGatheringState != "complete":
-                await asyncio.sleep(0.05)
-            payload = answer_message(pc.localDescription.sdp)
+            async with pinned_ice_port(ICE_PORT):
+                await pc.setLocalDescription(await pc.createAnswer())
+                while pc.iceGatheringState != "complete":
+                    await asyncio.sleep(0.05)
+            sdp = pc.localDescription.sdp
+            if ADVERTISE:
+                sdp = advertise_host(sdp, ADVERTISE)
+            payload = answer_message(sdp)
         except Exception as exc:
             payload = (json.dumps({"type": "error", "error": str(exc)}) + "\n").encode()
             queued = None
@@ -111,26 +121,75 @@ def main():
     parser.add_argument("--key", default="certs/key.pem")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=4433)
+    parser.add_argument("--advertise", default="", help="address written into ICE candidates")
+    parser.add_argument("--ice-port", type=int, default=0, help="fixed UDP port for the media socket")
     args = parser.parse_args()
+
+    global ADVERTISE, ICE_PORT
+    ADVERTISE = args.advertise
+    ICE_PORT = args.ice_port
 
     configuration = QuicConfiguration(alpn_protocols=H3_ALPN, is_client=False,max_datagram_frame_size=65536)
     configuration.load_cert_chain(args.cert, args.key)
 
     async def run():
-        for host in ("127.0.0.1", "::1"):
-            await serve(
-                host,
-                args.port,
-                configuration=configuration,
-                create_protocol=HttpServerProtocol,
-            )
+        servers = []
+        for host in listen_hosts(args.host):
+            try:
+                servers.append(await serve(
+                    host,
+                    args.port,
+                    configuration=configuration,
+                    create_protocol=HttpServerProtocol,
+                ))
+            except OSError as exc:
+                if servers and exc.errno in (errno.EADDRINUSE, errno.EAFNOSUPPORT):
+                    continue
+                raise
         print(f"https://localhost:{args.port}")
-        await asyncio.Future()
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop.set)
+        await stop.wait()
+        for pc in list(PEERS):
+            await pc.close()
+        for server in servers:
+            server.close()
 
-    try:
-        asyncio.run(run())
-    except KeyboardInterrupt:
-        return
+    asyncio.run(run())
+
+
+class _PinnedIce:
+    def __init__(self, port):
+        self.port = port
+        self.loop = None
+        self.original = None
+        self.used = False
+
+    async def __aenter__(self):
+        if not self.port:
+            return
+        self.loop = asyncio.get_running_loop()
+        self.original = self.loop.create_datagram_endpoint
+
+        async def patched(protocol_factory, local_addr=None, *args, **kwargs):
+            if local_addr is not None and local_addr[1] == 0:
+                if self.used:
+                    raise OSError(errno.EADDRINUSE, "ice port already bound")
+                local_addr = ("0.0.0.0", self.port)
+                self.used = True
+            return await self.original(protocol_factory, local_addr, *args, **kwargs)
+
+        self.loop.create_datagram_endpoint = patched
+
+    async def __aexit__(self, exc_type, exc, tb):
+        if self.original is not None:
+            self.loop.create_datagram_endpoint = self.original
+
+
+def pinned_ice_port(port):
+    return _PinnedIce(port)
 
 
 if __name__ == "__main__":

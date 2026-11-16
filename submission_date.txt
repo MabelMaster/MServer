@@ -1,0 +1,3 @@
+2026-11-16
+
+Developed on macOS (Apple Silicon). The server, tests, and Dockerfile are ordinary Python and are meant to be graded on Linux.
