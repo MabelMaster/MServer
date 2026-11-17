@@ -38,7 +38,11 @@ function detectBall(video) {
   let count = 0;
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
-      if (pixels[(row * width + col) * 4] > 200) {
+      const offset = (row * width + col) * 4;
+      const distance = Math.abs(pixels[offset] - 110)
+        + Math.abs(pixels[offset + 1] - 62)
+        + Math.abs(pixels[offset + 2] - 144);
+      if (distance > 80) {
         sumX += col + 0.5;
         sumY += row + 0.5;
         count += 1;
@@ -57,11 +61,27 @@ function frameIndex(rtpTimestamp, origin) {
 
 function watchFrames(video) {
   let origin = null;
+  let shift = null;
   const onFrame = (now, metadata) => {
     try {
       if (origin === null) origin = metadata.rtpTimestamp;
-      const frame = frameIndex(metadata.rtpTimestamp, origin);
+      const elapsed = frameIndex(metadata.rtpTimestamp, origin);
       const detected = detectBall(video);
+      if (shift === null && detected) {
+        let best = null;
+        let bestDistance = Infinity;
+        for (let index = 0; index <= 5; index += 1) {
+          const candidate = truths.get(index);
+          if (!candidate) continue;
+          const distance = Math.hypot(detected.x - candidate.x, detected.y - candidate.y);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            best = index;
+          }
+        }
+        if (best !== null && bestDistance < 3) shift = best - elapsed;
+      }
+      const frame = shift === null ? elapsed : elapsed + shift;
       const truth = truths.get(frame);
       if (detected && truth) {
         const error = Math.hypot(detected.x - truth.x, detected.y - truth.y);
