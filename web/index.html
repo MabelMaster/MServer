@@ -3,12 +3,23 @@
 <head>
   <meta charset="utf-8">
   <title>MServer</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 12px;
+    }
+  </style>
 </head>
 <body>
-  <h1>MServer</h1>
+  <h1>A bouncing ball demo</h1>
   <p id="status">starting</p>
   <video autoplay muted playsinline width="640" height="480"></video>
   <p id="error">waiting for frames</p>
-  <script src="/main.js?v=3"></script>
+  <script src="/main.js?v=5"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# MServer
+# Demo
 
 A small HTTP/3 page that plays a synthetic bouncing ball over WebRTC and prints how far the detected center is from the server's ground truth.
 
